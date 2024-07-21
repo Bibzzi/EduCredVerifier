@@ -1,0 +1,73 @@
+type Credential = record {
+  id : nat64;
+  issued_at : nat64;
+  revoked : bool;
+  institution_id : nat64;
+  student_id : nat64;
+  degree : text;
+  graduation_year : nat32;
+  course : text;
+};
+type CredentialPayload = record {
+  token : text;
+  institution_id : nat64;
+  student_id : nat64;
+  degree : text;
+  graduation_year : nat32;
+  course : text;
+};
+type Institution = record {
+  id : nat64;
+  name : text;
+  created_at : nat64;
+  address : text;
+};
+type InstitutionPayload = record { name : text; address : text };
+type Message = variant {
+  Error : text;
+  InvalidPayload : text;
+  NotFound : text;
+  Success : text;
+  Unauthorized : text;
+};
+type Result = variant { Ok : Credential; Err : Message };
+type Result_1 = variant { Ok : Institution; Err : Message };
+type Result_2 = variant { Ok : Student; Err : Message };
+type Result_3 = variant { Ok : vec Credential; Err : Message };
+type Result_4 = variant { Ok : vec Institution; Err : Message };
+type Result_5 = variant { Ok : vec Student; Err : Message };
+type RevokeCredentialPayload = record { id : nat64; token : text };
+type SearchCredentialPayload = record {
+  degree : opt text;
+  graduation_year : opt nat32;
+  course : opt text;
+};
+type Student = record {
+  id : nat64;
+  name : text;
+  created_at : nat64;
+  email : text;
+};
+type StudentPayload = record { name : text; email : text };
+type UpdateCredentialPayload = record {
+  id : nat64;
+  degree : opt text;
+  graduation_year : opt nat32;
+  course : opt text;
+};
+type VerifyPayload = record { institution_id : nat64; student_id : nat64 };
+service : {
+  create_credential : (CredentialPayload) -> (Result);
+  create_institution : (InstitutionPayload) -> (Result_1);
+  create_student : (StudentPayload) -> (Result_2);
+  get_credential_by_id : (nat64) -> (Result) query;
+  get_credentials : () -> (Result_3) query;
+  get_institution_by_id : (nat64) -> (Result_1) query;
+  get_institutions : () -> (Result_4) query;
+  get_student_by_id : (nat64) -> (Result_2) query;
+  get_students : () -> (Result_5) query;
+  revoke_credential : (RevokeCredentialPayload) -> (Result);
+  search_credentials : (SearchCredentialPayload) -> (Result_3) query;
+  update_credential : (UpdateCredentialPayload, text) -> (Result);
+  verify_credential : (VerifyPayload) -> (Result) query;
+}
