@@ -153,11 +153,24 @@ struct SearchCredentialPayload {
     graduation_year: Option<u32>,
 }
 
-//  Revoke_credential Payload
 #[derive(candid::CandidType, Deserialize, Serialize)]
 struct RevokeCredentialPayload {
     id: u64,
     token: String,
+}
+
+#[derive(candid::CandidType, Deserialize, Serialize)]
+struct UpdateInstitutionPayload {
+    id: u64,
+    name: Option<String>,
+    address: Option<String>,
+}
+
+#[derive(candid::CandidType, Deserialize, Serialize)]
+struct UpdateStudentPayload {
+    id: u64,
+    name: Option<String>,
+    email: Option<String>,
 }
 
 #[derive(candid::CandidType, Deserialize, Serialize)]
@@ -176,23 +189,16 @@ fn authenticate(token: &str) -> bool {
 
 #[ic_cdk::update]
 fn create_credential(payload: CredentialPayload) -> Result<Credential, Message> {
-    // Authenticate the request
     if !authenticate(&payload.token) {
         return Err(Message::Unauthorized("Unauthorized".to_string()));
     }
 
-    // Ensure all fields are provided
     if payload.course.is_empty() || payload.degree.is_empty() {
-        return Err(Message::InvalidPayload(
-            "Ensure 'course' and 'degree' are provided.".to_string(),
-        ));
+        return Err(Message::InvalidPayload("Ensure 'course' and 'degree' are provided.".to_string()));
     }
 
     let student_exists = STUDENTS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .any(|(_, student)| student.id == payload.student_id)
+        storage.borrow().iter().any(|(_, student)| student.id == payload.student_id)
     });
 
     if !student_exists {
@@ -200,22 +206,17 @@ fn create_credential(payload: CredentialPayload) -> Result<Credential, Message> 
     }
 
     let institution_exists = INSTITUTIONS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .any(|(_, institution)| institution.id == payload.institution_id)
+        storage.borrow().iter().any(|(_, institution)| institution.id == payload.institution_id)
     });
 
     if !institution_exists {
         return Err(Message::NotFound("Institution not found".to_string()));
     }
 
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = ID_COUNTER.with(|counter| {
+        let current_value = *counter.borrow().get();
+        counter.borrow_mut().set(current_value + 1)
+    }).expect("Cannot increment ID counter");
 
     let credential = Credential {
         id,
@@ -227,6 +228,7 @@ fn create_credential(payload: CredentialPayload) -> Result<Credential, Message> 
         issued_at: current_time(),
         revoked: false,
     };
+
     CREDENTIALS_STORAGE.with(|storage| storage.borrow_mut().insert(id, credential.clone()));
     Ok(credential)
 }
@@ -250,10 +252,7 @@ fn revoke_credential(payload: RevokeCredentialPayload) -> Result<Credential, Mes
 }
 
 #[ic_cdk::update]
-fn update_credential(
-    payload: UpdateCredentialPayload,
-    token: String,
-) -> Result<Credential, Message> {
+fn update_credential(payload: UpdateCredentialPayload, token: String) -> Result<Credential, Message> {
     if !authenticate(&token) {
         return Err(Message::Unauthorized("Unauthorized".to_string()));
     }
@@ -278,15 +277,104 @@ fn update_credential(
     })
 }
 
+#[ic_cdk::update]
+fn update_institution(payload: UpdateInstitutionPayload, token: String) -> Result<Institution, Message> {
+    if !authenticate(&token) {
+        return Err(Message::Unauthorized("Unauthorized".to_string()));
+    }
+
+    INSTITUTIONS_STORAGE.with(|storage| {
+        let mut institutions = storage.borrow_mut();
+        if let Some(mut institution) = institutions.remove(&payload.id) {
+            if let Some(name) = payload.name {
+                institution.name = name;
+            }
+            if let Some(address) = payload.address {
+                institution.address = address;
+            }
+            institutions.insert(payload.id, institution.clone());
+            Ok(institution)
+        } else {
+            Err(Message::NotFound("Institution not found".to_string()))
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn update_student(payload: UpdateStudentPayload, token: String) -> Result<Student, Message> {
+    if !authenticate(&token) {
+        return Err(Message::Unauthorized("Unauthorized".to_string()));
+    }
+
+    STUDENTS_STORAGE.with(|storage| {
+        let mut students = storage.borrow_mut();
+        if let Some(mut student) = students.remove(&payload.id) {
+            if let Some(name) = payload.name {
+                student.name = name;
+            }
+            if let Some(email) = payload.email {
+                student.email = email;
+            }
+            students.insert(payload.id, student.clone());
+            Ok(student)
+        } else {
+            Err(Message::NotFound("Student not found".to_string()))
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn delete_credential(id: u64, token: String) -> Result<(), Message> {
+    if !authenticate(&token) {
+        return Err(Message::Unauthorized("Unauthorized".to_string()));
+    }
+
+    CREDENTIALS_STORAGE.with(|storage| {
+        let mut credentials = storage.borrow_mut();
+        if credentials.remove(&id).is_some() {
+            Ok(())
+        } else {
+            Err(Message::NotFound("Credential not found".to_string()))
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn delete_institution(id: u64, token: String) -> Result<(), Message> {
+    if !authenticate(&token) {
+        return Err(Message::Unauthorized("Unauthorized".to_string()));
+    }
+
+    INSTITUTIONS_STORAGE.with(|storage| {
+        let mut institutions = storage.borrow_mut();
+        if institutions.remove(&id).is_some() {
+            Ok(())
+        } else {
+            Err(Message::NotFound("Institution not found".to_string()))
+        }
+    })
+}
+
+#[ic_cdk::update]
+fn delete_student(id: u64, token: String) -> Result<(), Message> {
+    if !authenticate(&token) {
+        return Err(Message::Unauthorized("Unauthorized".to_string()));
+    }
+
+    STUDENTS_STORAGE.with(|storage| {
+        let mut students = storage.borrow_mut();
+        if students.remove(&id).is_some() {
+            Ok(())
+        } else {
+            Err(Message::NotFound("Student not found".to_string()))
+        }
+    })
+}
+
 #[ic_cdk::query]
 fn get_credentials() -> Result<Vec<Credential>, Message> {
     CREDENTIALS_STORAGE.with(|storage| {
-        let credentials: Vec<Credential> = storage
-            .borrow()
-            .iter()
-            .map(|(_, credential)| credential.clone())
-            .collect();
-
+        let credentials: Vec<Credential> = storage.borrow().iter().map(|(_, credential)| credential.clone()).collect();
         if credentials.is_empty() {
             Err(Message::NotFound("No credentials found".to_string()))
         } else {
@@ -298,10 +386,7 @@ fn get_credentials() -> Result<Vec<Credential>, Message> {
 #[ic_cdk::query]
 fn get_credential_by_id(id: u64) -> Result<Credential, Message> {
     CREDENTIALS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, credential)| credential.id == id)
+        storage.borrow().iter().find(|(_, credential)| credential.id == id)
             .map(|(_, credential)| credential.clone())
             .ok_or(Message::NotFound("Credential not found".to_string()))
     })
@@ -310,29 +395,24 @@ fn get_credential_by_id(id: u64) -> Result<Credential, Message> {
 #[ic_cdk::query]
 fn search_credentials(payload: SearchCredentialPayload) -> Result<Vec<Credential>, Message> {
     CREDENTIALS_STORAGE.with(|storage| {
-        let credentials: Vec<Credential> = storage
-            .borrow()
-            .iter()
-            .filter(|(_, credential)| {
-                if let Some(course) = &payload.course {
-                    if !credential.course.contains(course) {
-                        return false;
-                    }
+        let credentials: Vec<Credential> = storage.borrow().iter().filter(|(_, credential)| {
+            if let Some(course) = &payload.course {
+                if !credential.course.contains(course) {
+                    return false;
                 }
-                if let Some(degree) = &payload.degree {
-                    if !credential.degree.contains(degree) {
-                        return false;
-                    }
+            }
+            if let Some(degree) = &payload.degree {
+                if !credential.degree.contains(degree) {
+                    return false;
                 }
-                if let Some(graduation_year) = payload.graduation_year {
-                    if credential.graduation_year != graduation_year {
-                        return false;
-                    }
+            }
+            if let Some(graduation_year) = payload.graduation_year {
+                if credential.graduation_year != graduation_year {
+                    return false;
                 }
-                true
-            })
-            .map(|(_, credential)| credential.clone())
-            .collect();
+            }
+            true
+        }).map(|(_, credential)| credential.clone()).collect();
 
         if credentials.is_empty() {
             Err(Message::NotFound("No credentials found".to_string()))
@@ -342,41 +422,10 @@ fn search_credentials(payload: SearchCredentialPayload) -> Result<Vec<Credential
     })
 }
 
-#[ic_cdk::update]
-fn create_institution(payload: InstitutionPayload) -> Result<Institution, Message> {
-    // Ensure all fields are provided
-    if payload.name.is_empty() || payload.address.is_empty() {
-        return Err(Message::InvalidPayload(
-            "Ensure 'name' and 'address' are provided.".to_string(),
-        ));
-    }
-
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let institution = Institution {
-        id,
-        name: payload.name,
-        address: payload.address,
-        created_at: current_time(),
-    };
-    INSTITUTIONS_STORAGE.with(|storage| storage.borrow_mut().insert(id, institution.clone()));
-    Ok(institution)
-}
-
 #[ic_cdk::query]
 fn get_institutions() -> Result<Vec<Institution>, Message> {
     INSTITUTIONS_STORAGE.with(|storage| {
-        let institutions: Vec<Institution> = storage
-            .borrow()
-            .iter()
-            .map(|(_, institution)| institution.clone())
-            .collect();
-
+        let institutions: Vec<Institution> = storage.borrow().iter().map(|(_, institution)| institution.clone()).collect();
         if institutions.is_empty() {
             Err(Message::NotFound("No institutions found".to_string()))
         } else {
@@ -388,61 +437,16 @@ fn get_institutions() -> Result<Vec<Institution>, Message> {
 #[ic_cdk::query]
 fn get_institution_by_id(id: u64) -> Result<Institution, Message> {
     INSTITUTIONS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, institution)| institution.id == id)
+        storage.borrow().iter().find(|(_, institution)| institution.id == id)
             .map(|(_, institution)| institution.clone())
             .ok_or(Message::NotFound("Institution not found".to_string()))
     })
 }
 
-#[ic_cdk::update]
-fn create_student(payload: StudentPayload) -> Result<Student, Message> {
-    // Ensure all the fields are provided
-    if payload.name.is_empty() || payload.email.is_empty() {
-        return Err(Message::InvalidPayload(
-            "Ensure 'name' and 'email' are provided.".to_string(),
-        ));
-    }
-
-    // Ensure the email is unique for each student
-    let email_exists = STUDENTS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .any(|(_, student)| student.email == payload.email)
-    });
-    if email_exists {
-        return Err(Message::InvalidPayload("Email already exists".to_string()));
-    }
-
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let student = Student {
-        id,
-        name: payload.name,
-        email: payload.email,
-        created_at: current_time(),
-    };
-    STUDENTS_STORAGE.with(|storage| storage.borrow_mut().insert(id, student.clone()));
-    Ok(student)
-}
-
 #[ic_cdk::query]
 fn get_students() -> Result<Vec<Student>, Message> {
     STUDENTS_STORAGE.with(|storage| {
-        let students: Vec<Student> = storage
-            .borrow()
-            .iter()
-            .map(|(_, student)| student.clone())
-            .collect();
-
+        let students: Vec<Student> = storage.borrow().iter().map(|(_, student)| student.clone()).collect();
         if students.is_empty() {
             Err(Message::NotFound("No students found".to_string()))
         } else {
@@ -454,10 +458,7 @@ fn get_students() -> Result<Vec<Student>, Message> {
 #[ic_cdk::query]
 fn get_student_by_id(id: u64) -> Result<Student, Message> {
     STUDENTS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, student)| student.id == id)
+        storage.borrow().iter().find(|(_, student)| student.id == id)
             .map(|(_, student)| student.clone())
             .ok_or(Message::NotFound("Student not found".to_string()))
     })
@@ -466,16 +467,12 @@ fn get_student_by_id(id: u64) -> Result<Student, Message> {
 #[ic_cdk::query]
 fn verify_credential(payload: VerifyPayload) -> Result<Credential, Message> {
     CREDENTIALS_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, credential)| {
-                credential.student_id == payload.student_id
-                    && credential.institution_id == payload.institution_id
-                    && !credential.revoked
-            })
-            .map(|(_, credential)| credential.clone())
-            .ok_or(Message::NotFound("Credential not found".to_string()))
+        storage.borrow().iter().find(|(_, credential)| {
+            credential.student_id == payload.student_id &&
+            credential.institution_id == payload.institution_id &&
+            !credential.revoked
+        }).map(|(_, credential)| credential.clone())
+        .ok_or(Message::NotFound("Credential not found".to_string()))
     })
 }
 
